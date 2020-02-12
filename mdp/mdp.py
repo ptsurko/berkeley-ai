@@ -1,11 +1,7 @@
-
-
 def expected_utility(mdp, values, state, action):
     return sum(t * values[new_state] for (t, new_state) in mdp.T(state, action))
 
-
 argmax = max
-
 
 def value_iteration(mdp, epsilon=0.001):
     convergence = False
@@ -18,7 +14,7 @@ def value_iteration(mdp, epsilon=0.001):
         delta = 0
         for state in mdp.states():
             actions = mdp.actions(state)
-            max_q_value = None
+            max_q_value = -float('inf')
 
             for action in actions:
                 q_value = sum(t * values[new_state] for (t, new_state) in mdp.T(state, action))
@@ -38,7 +34,7 @@ def value_iteration(mdp, epsilon=0.001):
 def policy_evaluation(mdp, policy, max_k=20):
     values = {state: 0 for state in mdp.states()}
 
-    for k in xrange(max_k):
+    for k in range(max_k):
         new_values = values.copy()
 
         for state in mdp.states():
@@ -122,14 +118,14 @@ class GridMove:
 
 
 class GridMdp(Mdp):
-    def __init__(self, grid, terminals=[], gamma=1, probability=0.8, side_probability=0.1):
+    def __init__(self, grid, terminals=[], gamma=1, probability=0.8):
         self._grid = grid
         transitions = {}
         rewards = {}
         actions = [GridMove.TOP, GridMove.RIGHT, GridMove.BOTTOM, GridMove.LEFT]
 
-        for row in xrange(len(grid)):
-            for col in xrange(len(grid[0])):
+        for row in range(len(grid)):
+            for col in range(len(grid[0])):
                 state = (row, col)
                 if grid[row][col] is None:
                     continue
@@ -139,7 +135,7 @@ class GridMdp(Mdp):
                     for action in actions:
                         outcomes = []
 
-                        for possible_action, action_probability in GridMdp.get_possible_actions(action, probability, side_probability):
+                        for possible_action, action_probability in GridMdp.get_possible_actions(action, probability):
                             new_state = GridMdp.move_to(grid, (row, col), possible_action)
                             outcomes.append((new_state, action_probability))
 
@@ -151,15 +147,15 @@ class GridMdp(Mdp):
         Mdp.__init__(self, transitions, rewards, terminals=terminals, gamma=gamma)
 
     @staticmethod
-    def get_possible_actions(move, probability, side_probability):
+    def get_possible_actions(move, probability):
         if move == GridMove.TOP:
-            return [(GridMove.TOP, probability), (GridMove.RIGHT, side_probability), (GridMove.LEFT, side_probability)]
+            return [(GridMove.TOP, probability), (GridMove.RIGHT, (1 - probability) / 2), (GridMove.LEFT, (1 - probability) / 2)]
         if move == GridMove.RIGHT:
-            return [(GridMove.RIGHT, probability), (GridMove.TOP, side_probability), (GridMove.BOTTOM, side_probability)]
+            return [(GridMove.RIGHT, probability), (GridMove.TOP, (1 - probability) / 2), (GridMove.BOTTOM, (1 - probability) / 2)]
         if move == GridMove.BOTTOM:
-            return [(GridMove.BOTTOM, probability), (GridMove.RIGHT, side_probability), (GridMove.LEFT, side_probability)]
+            return [(GridMove.BOTTOM, probability), (GridMove.RIGHT, (1 - probability) / 2), (GridMove.LEFT, (1 - probability) / 2)]
 
-        return [(GridMove.LEFT, probability), (GridMove.TOP, side_probability), (GridMove.BOTTOM, side_probability)]
+        return [(GridMove.LEFT, probability), (GridMove.TOP, (1 - probability) / 2), (GridMove.BOTTOM, (1 - probability) / 2)]
 
 
     @staticmethod
@@ -194,9 +190,9 @@ class GridMdp(Mdp):
             None: '.',
         }
         result = []
-        for row in xrange(len(self._grid)):
+        for row in range(len(self._grid)):
             row_moves = []
-            for col in xrange(len(self._grid[0])):
+            for col in range(len(self._grid[0])):
                 for (state, action) in actions:
                     if state == (row, col):
                         row_moves.append(chars[action])
