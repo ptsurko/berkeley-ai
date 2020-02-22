@@ -102,7 +102,7 @@ class PolicyIterationAgent(Agent):
                 break
 
 
-class ReinforcementAgent(Agent):
+class SampleQLearningAgent(Agent):
     def __init__(self, initial_state=None, samples=[], alpha=0.9, gamma=1):
         super().__init__(gamma) 
 
@@ -112,38 +112,36 @@ class ReinforcementAgent(Agent):
 
 
     def get_q_value(self, mdp, state, action):
-        transitions = mdp.transitions(state, action)
-        if not len(transitions):
-            return 0
-
-        return sum(prob * (mdp.get_reward(state) + self.gamma * self.values[new_state]) for (new_state, prob) in mdp.transitions(state, action))
+        return self.q_values[state][action]
 
     def get_value(self, mdp, state):
-        actions = mdp.actions(state)
-        if not len(actions):
-            return 0
+        return self.values[state]
+        # actions = mdp.actions(state)
+        # if not len(actions):
+        #     return 0
 
-        return max(self.get_q_value(mdp, state, action) for action in actions)
+        # return max(self.get_q_value(mdp, state, action) for action in actions)
 
     def learn(self, mdp):
-        self.values = {state: 0 for state in mdp.states()}
-        self.q_values = {state: [0] * len(mdp.actions(state)) for state in mdp.states()}
+        self.values = defaultdict(int)
+        self.q_values = {state: defaultdict(int) for state in mdp.states()}
         
         for sample in self.samples:
             state = self.initial_state
-            new_values = {}
+            new_values = self.values.copy()
             new_q_values = {key: value.copy() for key, value in self.q_values.items()}
 
             for action in sample:
                 next_state = mdp.next_state(state, action)
-                actions = mdp.actions(state)
-                action_index = actions.index(action)
 
-                sample = mdp.get_reward(state) + self.gamma * (max(self.q_values[next_state]) if len(self.q_values[next_state]) else 0)
-                q_value = (1 - self.alpha) * self.q_values[state][action_index] + self.alpha * sample
+                sample = mdp.get_reward(state) + self.gamma * self.get_value(mdp, next_state)
                 
-                new_q_values[state][action_index] = q_value
-                new_values[state] = max(new_q_values[state])
+                q_value = (1 - self.alpha) * self.get_q_value(mdp, state, action) + self.alpha * sample
+                
+                # print('state: %s, action: %s, sample: %s, reward: %s, q_value: %s' % (state, action, sample, mdp.get_reward(state), q_value))
+
+                new_q_values[state][action] = q_value
+                new_values[state] = max(new_q_values[state].values()) if len(new_q_values[state]) else 0
                 state = next_state
 
             self.values = new_values
