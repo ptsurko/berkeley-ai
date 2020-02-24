@@ -3,3 +3,4 @@
 berkeley/
 edx/
 __pycache__/
+*.pyc

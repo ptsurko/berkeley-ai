@@ -56,7 +56,6 @@ class ValueIterationAgent(Agent):
             if self.max_iterations is None and delta <= self.epsilon * (1 - self.gamma) / self.gamma:
                 convergence = True
 
-
 class PolicyIterationAgent(Agent):
     def __init__(self, initial_action, gamma=0.9):
         super().__init__(gamma) 
@@ -100,7 +99,6 @@ class PolicyIterationAgent(Agent):
 
             if not changed:
                 break
-
 
 class SampleQLearningAgent(Agent):
     def __init__(self, initial_state=None, samples=[], alpha=0.9, gamma=1):
@@ -147,6 +145,9 @@ class SampleQLearningAgent(Agent):
             self.values = new_values
             self.q_values = new_q_values
     
+class ExploreQLearningAgent(Agent):
+    pass
+
 
 # Rewrite using q-values
 def best_policy(mdp, values):
