@@ -7,156 +7,161 @@ argmax = max
 
 
 class Agent:
-    def __init__(self, gamma):
-        self.gamma = gamma
-        self.values = defaultdict(int)
+    def get_q_value(self, state, action):
+        raise NotImplementedError("Please Implement this method")
 
-    def get_q_value(self, mdp, state, action):
-        transitions = mdp.transitions(state, action)
-        if not len(transitions):
-            return 0
+    def get_value(self, state):
+        raise NotImplementedError("Please Implement this method")
 
-        return sum(prob * (mdp.get_reward(state) + self.gamma * self.values[new_state]) for (new_state, prob) in mdp.transitions(state, action))
-
-    def get_value(self, mdp, state):
-        actions = mdp.actions(state)
-        if not len(actions):
-            return 0
-
-        return max(self.get_q_value(mdp, state, action) for action in actions)
-
-
-    def learn(self, mdp):
+    def get_action(self, state):
         raise NotImplementedError("Please Implement this method")
 
 class ValueIterationAgent(Agent):
-    def __init__(self, epsilon=0.001, max_iterations=None, gamma=0.9):
-        super().__init__(gamma) 
-        self.epsilon = epsilon
+    def __init__(self, mdp, max_iterations=None, gamma=0.9):
+        self.mdp = mdp
         self.max_iterations = max_iterations
-
-    def learn(self, mdp):
-        convergence = False
+        self.gamma = gamma
         self.values = defaultdict(int)
 
-        iteration = 0
-        while not convergence:
+        for _ in range(max_iterations):
             new_values = defaultdict(int)
 
-            delta = 0
-            for state in mdp.states():
-                new_values[state] = self.get_value(mdp, state)
-                delta = max(delta, abs(new_values[state] - new_values[state]))
+            for state in self.mdp.states():
+                new_values[state] = self.compute_value(state)
 
             self.values = new_values
-            iteration += 1
 
-            if self.max_iterations is not None and iteration >= self.max_iterations:
-                convergence = True
-            if self.max_iterations is None and delta <= self.epsilon * (1 - self.gamma) / self.gamma:
-                convergence = True
+    def get_q_value(self, state, action):
+        transitions = list(self.mdp.transitions(state, action))
+        if not len(transitions):
+            return 0
+
+        return sum(prob * (self.mdp.get_reward(state) + self.gamma * self.get_value(new_state)) for (new_state, prob) in self.mdp.transitions(state, action))
+
+    def get_value(self, state):
+        return self.values[state]
+
+    def get_action(self, state):
+        actions = self.mdp.actions(state)
+        if not len(actions):
+            return None
+
+        return max(actions, key=lambda action: self.get_q_value(state, action))
+
+    def compute_value(self, state):
+        actions = self.mdp.actions(state)
+        if not len(actions):
+            return 0
+
+        return max(self.get_q_value(state, action) for action in actions)
 
 class PolicyIterationAgent(Agent):
-    def __init__(self, initial_action, gamma=0.9):
-        super().__init__(gamma) 
+    def __init__(self, mdp, initial_action, gamma=0.9):
+        self.mdp = mdp
         self.initial_action = initial_action
+        self.gamma = gamma
+        self.values = defaultdict(int)
 
-    def policy_evaluation(self, mdp, policy, max_k=9):
-        values = defaultdict(int)
+        self.policy_iteration()
 
+    def policy_evaluation(self, policy, max_k=9):
         for _ in range(max_k):
-            new_values = values.copy()
+            new_values = defaultdict(int)
 
-            for state in mdp.states():
-                new_values[state] = self.get_value(mdp, state)
+            for state in self.mdp.states():
+                new_values[state] = self.compute_value(state)
 
-            values = new_values
+            self.values = new_values
 
-        return values
-
-    def learn(self, mdp):
-        policy = {state: self.initial_action for state in mdp.states()}
+    def policy_iteration(self):
+        policy = {state: self.initial_action for state in self.mdp.states()}
 
         while True:
             changed = False
 
-            self.values = self.policy_evaluation(mdp, policy)
+            self.policy_evaluation(policy)
             new_policy = policy.copy()
-            for state in mdp.states():
-                actions = mdp.actions(state)
-                max_action = None
-                if len(actions):
-                    max_action = argmax(
-                        mdp.actions(state),
-                        key=lambda action: self.get_q_value(mdp, state, action)
-                    )
-
-                new_policy[state] = max_action
-                if policy[state] != new_policy[state]:
-                    changed = True
+            for state in self.mdp.states():
+                new_policy[state] = self.compute_action(state)
+                changed = changed or (policy[state] != new_policy[state])
 
             policy = new_policy
 
             if not changed:
                 break
 
-class SampleQLearningAgent(Agent):
-    def __init__(self, initial_state=None, samples=[], alpha=0.9, gamma=1):
-        super().__init__(gamma) 
+    def get_q_value(self, state, action):
+        transitions = self.mdp.transitions(state, action)
+        if not len(transitions):
+            return 0
 
+        return sum(prob * (self.mdp.get_reward(state) + self.gamma * self.get_value(new_state)) for (new_state, prob) in self.mdp.transitions(state, action))
+
+    def get_value(self, state):
+        return self.values[state]
+
+    def get_action(self, state):
+        return self.compute_action(state)
+
+    def compute_value(self, state):
+        actions = self.mdp.actions(state)
+        if not len(actions):
+            return 0
+
+        return max(self.get_q_value(state, action) for action in actions)
+
+    def compute_action(self, state):
+        actions = self.mdp.actions(state)
+        if not len(actions):
+            return None
+
+        return max(actions, key=lambda action: self.get_q_value(state, action))
+
+class SampleQLearningAgent(Agent):
+    def __init__(self, mdp, initial_state=None, samples=[], alpha=0.9, gamma=1):
+        self.mdp = mdp
+        self.gamma = gamma
         self.samples = samples
         self.initial_state = initial_state
         self.alpha = alpha
+        self.q_values = defaultdict(int)
 
+        for actions in samples:
+            self.update(actions)
 
-    def get_q_value(self, mdp, state, action):
-        return self.q_values[state][action]
+    def get_q_value(self, state, action):
+        return self.q_values[(state, action)]
 
-    def get_value(self, mdp, state):
-        return self.values[state]
-        # actions = mdp.actions(state)
-        # if not len(actions):
-        #     return 0
+    def get_value(self, state):
+        actions = self.mdp.actions(state)
+        if not len(actions):
+            return 0
 
-        # return max(self.get_q_value(mdp, state, action) for action in actions)
+        return max(self.get_q_value(state, action) for action in actions)
 
-    def learn(self, mdp):
-        self.values = defaultdict(int)
-        self.q_values = {state: defaultdict(int) for state in mdp.states()}
-        
-        for sample in self.samples:
-            state = self.initial_state
-            new_values = self.values.copy()
-            new_q_values = {key: value.copy() for key, value in self.q_values.items()}
+    def update(self, actions):
+        state = self.initial_state
+        new_q_values = self.q_values.copy()
 
-            for action in sample:
-                next_state = mdp.next_state(state, action)
+        for action in actions:
+            next_state = self.mdp.next_state(state, action)
 
-                sample = mdp.get_reward(state) + self.gamma * self.get_value(mdp, next_state)
-                
-                q_value = (1 - self.alpha) * self.get_q_value(mdp, state, action) + self.alpha * sample
-                
-                # print('state: %s, action: %s, sample: %s, reward: %s, q_value: %s' % (state, action, sample, mdp.get_reward(state), q_value))
+            sample = self.mdp.get_reward(state) + self.gamma * self.get_value(next_state)
+            
+            q_value = (1 - self.alpha) * self.get_q_value(state, action) + self.alpha * sample
+            
+            new_q_values[(state, action)] = q_value
+            state = next_state
 
-                new_q_values[state][action] = q_value
-                new_values[state] = max(new_q_values[state].values()) if len(new_q_values[state]) else 0
-                state = next_state
+        self.q_values = new_q_values
 
-            self.values = new_values
-            self.q_values = new_q_values
-    
 class ExploreQLearningAgent(Agent):
     pass
 
 
 # Rewrite using q-values
-def best_policy(mdp, values):
-    return [
-        (state, argmax(
-            mdp.actions(state),
-            key=lambda action: sum(t * values[new_state] for (new_state, t) in mdp.transitions(state, action))))
-        for state in mdp.states() if state is not Mdp.TERMINAL
-    ]
+def best_policy(agent, state):
+    return agent.get_action(state)
 
 
 class Mdp:
@@ -205,17 +210,14 @@ class GridMdp(Mdp):
             for col in range(len(self.grid[0])):
                 if self.grid[row][col] is not None:
                     states.append((row, col))
-        
         return states
 
     def transitions(self, state, action):
-        outcomes = []
-        if state is not Mdp.TERMINAL:
-            for possible_action, action_probability in self.get_possible_actions(action, self.noise):
-                new_state = self.next_state(state, possible_action)
-                outcomes.append((new_state, action_probability))
-
-        return outcomes
+        transitions = []
+        for possible_action, action_probability in self.get_possible_actions(action, self.noise):
+            new_state = self.next_state(state, possible_action)
+            transitions.append((new_state, action_probability))
+        return transitions
 
     def get_reward(self, state):
         if state == Mdp.TERMINAL:
@@ -232,7 +234,9 @@ class GridMdp(Mdp):
             return []
         row, col = state
         cell = self.grid[row][col]
-        if (type(cell) == int or type(cell) == float) and cell != 0:
+        if cell is None:
+            return []
+        elif (type(cell) == int or type(cell) == float) and cell != 0:
             return [Mdp.EXIT]
         return [GridMove.TOP, GridMove.RIGHT, GridMove.BOTTOM, GridMove.LEFT]
 
@@ -276,7 +280,7 @@ class GridMdp(Mdp):
 
         return state
 
-    def to_action_grid(self, actions):
+    def to_action_grid(self, agent):
         chars = {
             GridMove.TOP: '^',
             GridMove.RIGHT: '>',
@@ -288,10 +292,9 @@ class GridMdp(Mdp):
         for row in range(len(self.grid)):
             row_moves = []
             for col in range(len(self.grid[0])):
-                for (state, action) in actions:
-                    if state == (row, col):
-                        row_moves.append(chars[action])
-                        break
+                action = agent.get_action((row, col))
+                if action and action in chars:
+                    row_moves.append(chars[action])
                 else:
                     row_moves.append('.')
 
